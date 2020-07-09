@@ -1,74 +1,101 @@
+from tensorflow.keras.layers import Layer
+from tensorflow.keras import backend
+
+class LocalResponseNormalization(Layer):
+
+    def __init__(self, n=5, alpha=1e-4, beta=0.75, k=2, **kwargs):
+        self.n = n
+        self.alpha = alpha
+        self.beta = beta
+        self.k = k
+        super(LocalResponseNormalization, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        self.shape = input_shape
+        super(LocalResponseNormalization, self).build(input_shape)
+
+    def call(self, x):
+        _, r, c, f = self.shape 
+        squared = backend.square(x)
+        pooled = backend.pool2d(squared, (self.n, self.n), strides=(1,1), padding="same", pool_mode='avg')
+        summed = backend.sum(pooled, axis=3, keepdims=True)
+        averaged = self.alpha * backend.repeat_elements(summed, f, axis=3)
+        denom = backend.pow(self.k + averaged, self.beta)
+        return x / denom 
+    
+    def compute_output_shape(self, input_shape):
+        return input_shape 
+
+
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import *
 
-model = Sequential([
-    # The first convolutional layer
+model = Sequential()
+
+model.add(Conv2D(
+    input_shape=(224,224,3),
+    kernel_size=(11,11),
+    filters=96,
+    strides=(4,4),
+    padding='valid',
+    activation='relu'))
+
+
+model.add(LocalResponseNormalization())
+model.add(MaxPooling2D(
+    pool_size=(5,5),
+    strides=(1,1),
+    padding='valid'))
+model.add(Conv2D(
+    filters=256,
+    kernel_size=(5,5),
+    padding='valid',
+    activation='relu'))
+
+
+model.add(LocalResponseNormalization())
+model.add(MaxPooling2D(
+    pool_size=(3,3),
+    strides=(1,1),
+    padding='valid'))
+model.add(Conv2D(
+    filters=384,
+    kernel_size=(3,3),
+    padding='valid',
+    activation='relu'))
+
+
+model.add(
     Conv2D(
-        input_shape=(224,224,3),
-        kernel_size=(11,11),
-        filters=96,
-        strides=(4,4),
-        padding='same',
-        activation='relu'),
-    # The second convolutional layer
-    MaxPooling2D(
-        pool_size=(5,5),
-        strides=(1,1),
-        padding='same'),
-    # The third convolutional layer
-    MaxPooling2D(
-        pool_size=(3,3),
-        strides=(1,1),
-        padding='same'),
-    # The fourth convolutional layer
-    Conv2D(
-        kernel_size=(3,3),
         filters=384,
-        padding='same',
-        activation='relu'),
-    # The fifth convolutional layer
-    Conv2D(
         kernel_size=(3,3),
-        filters=256,
-        padding='same',
-        activation='relu'),
-    # Connect between Convolutional layers and Fully-Connected layers
-    MaxPooling2D(
-        pool_size=(2,2),
-        strides=(1,1),
-        padding='same'),
-    Flatten(),
-    # 6th Layer: Fully-Connected
-    Dense(
-        units=4096,
-        activation='relu'),
-    Dropout(
-        0.4),
-    # 7th Layer: Fully-Connected
-    Dense(
-        units=4096,
-        activation='relu'),
-    Dropout(
-        0.4),
-    # 8th Layer: Fully-Connected
-    Dense(
-        units=1000,
-        activation='relu'),
-    Dropout(
-        0.4),
-    # Output Layer
-    Dense(
-        units=1000,
-        activation='softmax')
-])
+        padding='valid',
+        activation='relu'))
+
+
+model.add(Conv2D(
+    filters=256,
+    kernel_size=(3,3),
+    padding='valid',
+    activation='relu'))
+
+
+model.add(Flatten())
+
+
+model.add(Dense(units=4096, activation='relu'))
+model.add(Dropout(rate=0.4))
+model.add(Dense(units=4096, activation='relu'))
+model.add(Dropout(rate=0.4))
+model.add(Dense(units=1000, activation='relu'))
+
+
+model.add(Dense(units=1000, activation='softmax'))
+
+
 model.compile(
     optimizer='adam',
     loss='categorical_crossentropy',
     metrics=['accuracy'])
-model.summary()
-
-# for layer in model.layers:
-#     if layer.name.startswith('conv2d'):
-#         print(f'{layer.input_shape} --> {layer.output_shape}', end='\n')
-#     if layer.name.startswith('max_pooling2d'):
-#         print(f'\n{layer.input_shape} --> {layer.output_shape} ==> ', end='')
+model.summary(line_length=72, positions=[.5, .86, 1., 1.])
+model.save('./models/AlexNet.no-division.model')
